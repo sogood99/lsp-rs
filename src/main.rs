@@ -8,8 +8,13 @@ use lsp_server::{handle_content, BufferedReader};
 
 fn main() {
     let mut buff_reader = BufferedReader::new();
-    let mut file = File::create(env::args().collect::<Vec<String>>().get(0).unwrap())
-        .expect("Failed to create file");
+    let args = env::args().collect::<Vec<String>>();
+    let mut file = if let Some(filename) = args.get(1) {
+        File::create(filename)
+    } else {
+        File::create("lsp_logger.txt")
+    }
+    .expect("Failed to create file");
     let mut buff = [0; 512];
     let mut handle = io::stdin().lock();
     while let Ok(n) = handle.read(&mut buff) {
