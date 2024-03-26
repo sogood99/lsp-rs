@@ -4,34 +4,43 @@ use std::{
     io::{self, Read, Write},
 };
 
-use lsp_server::{handle_content, BufferedReader};
+use lsp_server::{editor::EditorState, lsp::handle_message, rpc::BufferedReader};
 
 fn main() {
-    let mut buff_reader = BufferedReader::new();
     let args = env::args().collect::<Vec<String>>();
-    let mut file = if let Some(filename) = args.get(1) {
-        File::create(filename)
+    let mut logger: Box<dyn Write> = if let Some(filename) = args.get(1) {
+        Box::new(File::create(filename).expect("Failed to create logger file"))
     } else {
-        File::create("lsp_logger.txt")
-    }
-    .expect("Failed to create file");
+        Box::new(io::empty())
+    };
+
+    let mut buff_reader = BufferedReader::new();
     let mut buff = [0; 512];
     let mut handle = io::stdin().lock();
+    let mut editor_state = EditorState::new();
     while let Ok(n) = handle.read(&mut buff) {
-        buff_reader.read(&buff[..n]);
-        writeln!(
-            &mut file,
-            "Read data: {:?}",
-            String::from_utf8_lossy(&buff[..n])
-        )
-        .unwrap();
-        let res = buff_reader.decode_message();
+        if n == 0 {
+            break;
+        }
+        buff_reader.write(&buff[..n]);
+        let res = buff_reader.pop_message();
         match res {
-            Err(e) => write!(&mut file, "{}", e.to_string()).unwrap(),
-            Ok(Some((msg, content))) => {
-                let _ = handle_content(msg.method, content, &mut file);
-            }
+            Ok(Some(content)) => match handle_message(content, &mut editor_state, &mut logger) {
+                Ok(()) => (),
+                Err(e) => writeln!(
+                    &mut logger,
+                    "[Error] Error handling message {}",
+                    e.to_string()
+                )
+                .unwrap(),
+            },
             Ok(None) => (),
+            Err(e) => writeln!(
+                &mut logger,
+                "[Error] Could not pop message: {}",
+                e.to_string()
+            )
+            .unwrap(),
         }
         buff.fill(0);
     }
