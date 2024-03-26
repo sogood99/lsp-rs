@@ -32,6 +32,7 @@ impl BufferedReader {
         }
     }
     pub fn read(&mut self, buffer: &[u8]) {
+        // read buffer of bytes to String
         self.data.push_str(&String::from_utf8_lossy(buffer));
     }
 
@@ -40,6 +41,7 @@ impl BufferedReader {
     }
 
     pub fn decode_message(&mut self) -> Result<Option<(RequestMessage, String)>, MsgParseError> {
+        //
         let Some((header, content)) = self.data.split_once("\r\n\r\n") else {
             return Ok(None);
         };
@@ -96,15 +98,14 @@ pub fn handle_content(
                     let response = InitializeResponse::new(
                         msg.request.id,
                         "LSP-Server".to_string(),
-                        "0.0".to_string(),
-                        TextDocumentSyncKind::FULL,
-                        true,
+                        "0".to_string(),
                     );
                     let response_str = json_to_string(&response);
                     let encoded_response = encode_message(response_str);
                     writeln!(logger, "Sent response: {:?}", encoded_response).unwrap();
 
-                    io::stdout().write_all(encoded_response.as_bytes()).unwrap();
+                    io::stdout().write(encoded_response.as_bytes()).unwrap();
+                    io::stdout().flush().unwrap();
                     Ok(())
                 }
                 Err(e) => Err(MsgParseError(format!(
@@ -188,13 +189,7 @@ pub struct InitializeResult {
 }
 
 impl InitializeResponse {
-    pub fn new(
-        id: i64,
-        name: String,
-        version: String,
-        text_document_sync: usize,
-        hover_provider: bool,
-    ) -> InitializeResponse {
+    pub fn new(id: i64, name: String, version: String) -> InitializeResponse {
         InitializeResponse {
             response: ResponseMessage {
                 id,
@@ -204,8 +199,11 @@ impl InitializeResponse {
             },
             result: InitializeResult {
                 capabilities: ServerCapabilities {
-                    text_document_sync,
-                    hover_provider,
+                    text_document_sync: 1,
+                    hover_provider: true,
+                    definition_provider: true,
+                    code_action_provider: true,
+                    completion_provider: CompletionProvider {},
                 },
                 server_info: Info { name, version },
             },
@@ -225,6 +223,12 @@ impl TextDocumentSyncKind {
 pub struct ServerCapabilities {
     pub text_document_sync: usize,
     pub hover_provider: bool,
+    pub definition_provider: bool,
+    pub code_action_provider: bool,
+    pub completion_provider: CompletionProvider,
 }
+
+#[derive(Debug, Deserialize, Serialize)]
+pub struct CompletionProvider {}
 
 mod test;
